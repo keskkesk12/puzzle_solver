@@ -45,7 +45,9 @@ int main() {
   cv::createTrackbar("min_contour_size", window_name, &min_contour_size, 1000);
   cv::createTrackbar("max_contour_size", window_name, &max_contour_size, 5000);
   cv::createTrackbar("erode_dist", window_name, &erode_dist, 10);
-  cv::createTrackbar("corner_angle_threshold", window_name, &corner_angle_threshold, 40);
+  // cv::createTrackbar("corner_angle_threshold", window_name, &corner_angle_threshold, 40);
+  cv::createTrackbar("corner_min_range", window_name, &corner_min_range, 50);
+  cv::createTrackbar("corner_max_range", window_name, &corner_max_range, 50);
   cv::createTrackbar("smooth_size", window_name, &smooth_size, 10);
 
   while (1){
@@ -73,7 +75,7 @@ int main() {
     // cv::imshow(window_name, tile_draw_edges_image);
     // cv::imshow("grid", tiles_grid_image);
 
-    char key = cv::waitKey(200);
+    char key = cv::waitKey(20);
     if(key == 'q'){
       break;
     }

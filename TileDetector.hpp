@@ -64,7 +64,7 @@ struct Tile{
 class TileDetector{
   static float getIntersectionAngle(cv::Mat, cv::Point, int);
   static float getIntersectionAngleFast(cv::Point, cv::Point, cv::Point);
-  static std::vector<cv::Point> getTileCornersFast(std::vector<cv::Point>, int);
+  static std::vector<cv::Point> getTileCornersFast(std::vector<cv::Point>, int, int);
   static std::vector<cv::Point> refineCorners(std::vector<cv::Point>);
   static std::vector<cv::Point> getTileCorners(std::vector<cv::Point>, std::vector<int>);
   static std::vector<cv::Point> minimizeContour(std::vector<cv::Point>, int = 0);

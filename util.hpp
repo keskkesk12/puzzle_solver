@@ -28,6 +28,8 @@ extern int max_contour_size;
 extern int erode_dist;
 extern std::vector<int> corner_radii;
 extern int corner_angle_threshold;
+extern int corner_min_range;
+extern int corner_max_range;
 extern int smooth_size;
 extern int tileFitThreshold;
 

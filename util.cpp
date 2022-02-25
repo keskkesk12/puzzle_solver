@@ -22,14 +22,13 @@ int scale = 30;
 int threshold = 170;
 int min_contour_size = 530;
 int max_contour_size = 1400;
-// int erode_dist = 0;
 int erode_dist = 1;
 std::vector<int> corner_radii = {10, 20};
-int corner_angle_threshold = 35;
-// int corner_angle_threshold = 22;
+int corner_angle_threshold = 5;
+int corner_min_range = 0;
+int corner_max_range = 22;
 int smooth_size = 1;
 int tileFitThreshold = 12000;
-
 
 
 

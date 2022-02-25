@@ -21,6 +21,12 @@
 
 
 
+
+bool comparePair(std::pair<int, float> p1, std::pair<int, float> p2){
+  return p1.second < p2.second;
+}
+
+
 std::vector<std::vector<cv::Point>> TileDetector::getTileContours(cv::Mat img, int _erode_dist){
   std::vector<std::vector<cv::Point>> contours;
   cv::Mat temp_img;
@@ -43,48 +49,101 @@ cv::Mat TileDetector::drawTileContours(cv::Mat img, std::vector<std::vector<cv::
 }
 
 
-bool comparePair(std::pair<int, int> p1, std::pair<int, int> p2){
-  return p1.second > p2.second;
+std::vector<Tile> TileDetector::getTiles(cv::Mat img, std::vector<std::vector<cv::Point>> tile_contours){
+  std::vector<Tile> tiles;
+  for(int i = 0; i < tile_contours.size(); i++){
+    Tile temp_tile;
+
+    // Set id
+    temp_tile.id = i;
+
+    // Get contour offset
+    contour_size_t size = getContourSize(tile_contours[i]);
+    std::cout << "test1" << std::endl;
+
+    // Set offset
+    temp_tile.offset.x = size.min_x;
+    temp_tile.offset.y = size.min_y;
+
+    // Get minimum contour
+    temp_tile.contour = minimizeContour(tile_contours[i]);
+    std::cout << "test2" << std::endl;
+
+    // Set tile local_cg
+    temp_tile.local_cg = getContourCG(temp_tile.contour);
+    std::cout << "test3" << std::endl;
+
+    // Get corners
+    temp_tile.corners = getTileCornersFast(temp_tile.contour, corner_min_range, corner_max_range);
+    // temp_tile.corners = getTileCorners(temp_tile.contour, {4, 5, 6, 7, 8});
+    std::cout << "test4" << std::endl;
+
+    // Set edges
+    std::cout << "test5" << std::endl;
+    // temp_tile.edges = getTileEdges(temp_tile.contour, temp_tile.corners, img, temp_tile.offset, temp_tile.local_cg, temp_tile.id);
+
+    std::cout << "test6" << std::endl;
+    // Set image
+    // temp_tile.image = getTileImage(img, temp_tile);
+    // std::cout << "test7" << std::endl;
+
+    // Push tile to vector
+    tiles.push_back(temp_tile);
+  }
+
+  // Set edge global_id
+  int n = 0;
+  for(int i = 0; i < tiles.size(); i++){
+    int index = 0;
+    for(int j = 0; j < tiles[i].edges.size(); j++){
+      tiles[i].edges[j].global_id = n++;
+      tiles[i].edges[j].index = static_cast<EdgeIndex>(index++);
+    }
+  }
+
+  return tiles;
 }
 
 
-std::vector<cv::Point> TileDetector::getTileCornersFast(std::vector<cv::Point> tile_contour, int range){
+std::vector<cv::Point> TileDetector::getTileCornersFast(std::vector<cv::Point> tile_contour, int min_range, int max_range){
   std::vector<cv::Point> corners;
-  std::vector<std::pair<int, int>> contour_weights;
+  std::vector<std::pair<int, float>> contour_weights;
 
-  // Run through all edges and count number of radii which fit
+  // Run through all edges and count number of ranges which fit
   for(int i = 0; i < tile_contour.size(); i++){
     cv::Point center = tile_contour[i];
     cv::Point p1, p2;
-    // Check all radii for which fit
-    int weight = 0;
-    for(int j = 0; j < range; j++){
-      p1 = tile_contour[(tile_contour.size() + i - j)%tile_contour.size()];
-      p2 = tile_contour[(tile_contour.size() + i + j)%tile_contour.size()];
-      float angle = getIntersectionAngleFast(center, p1, p2) * RAD_2_DEG;
-
-      if((angle < 90 + corner_angle_threshold) || (angle < 90 - corner_angle_threshold)){
-        weight++;
-      }
+    // Check all ranges for which fit
+    float weight = 0;
+    for(int j = min_range; j < max_range; j++){
+      p1 = tile_contour[(tile_contour.size() + i - 1 - j)%tile_contour.size()];
+      p2 = tile_contour[(tile_contour.size() + i + 1 + j)%tile_contour.size()];
+      float angle = getIntersectionAngleFast(center, p1, p2);
+      weight += pow((angle - M_PI/2) * j, 2);
     }
-    contour_weights.push_back(std::pair<int, int>(i, weight));
+    contour_weights.push_back(std::pair<int, float>(i, weight));
   }
 
-  // Sort weights
-  std::sort(contour_weights.begin(), contour_weights.end(), comparePair);
-  
-  for(int i = 0; i < std::min(4, (int)tile_contour.size()); i++){
-    int index = contour_weights[i].first;
-    cv::Point p = tile_contour[index];
-    corners.push_back(p);
+  // Add points with low weight to corners
+  for(int i = 0; i < contour_weights.size(); i++){
+    float weight = contour_weights[i].second;
+    if(weight < 50){
+      int index = contour_weights[i].first;
+      cv::Point p = tile_contour[index];
+      corners.push_back(p);
+    }
   }
 
-  // for(int i = 0; i < contour_weights.size(); i++){
-  //   std::cout << contour_weights[i].first << ", " << contour_weights[i].second << std::endl;
-  // }
+  // Refine corner detections
+  std::vector<cv::Point> refined_corners = refineCorners(corners);
 
-  return corners;
+  // Arange corner points such that index 0 is always the most right point
+  int start_index = getCornerWithMaxX(refined_corners);
+  refined_corners = shiftVector(refined_corners, start_index);
+
+  return refined_corners;
 }
+
 
 float TileDetector::getIntersectionAngleFast(cv::Point center, cv::Point p1, cv::Point p2){
   cv::Point2f vec_a = p1 - center;
@@ -96,6 +155,7 @@ float TileDetector::getIntersectionAngleFast(cv::Point center, cv::Point p1, cv:
   }
   return angle;
 }
+
 
 std::vector<cv::Point> TileDetector::getTileCorners(std::vector<cv::Point> tile_contour, std::vector<int> radii){
   std::vector<cv::Point> corners;
@@ -142,11 +202,12 @@ std::vector<cv::Point> TileDetector::getTileCorners(std::vector<cv::Point> tile_
   return refined_corners;
 }
 
+
 std::vector<cv::Point> TileDetector::refineCorners(std::vector<cv::Point> corners){
   std::vector<cv::Point> hull;
   // Convex hull of corner points
   if(corners.size() >= 4){
-    cv::convexHull(corners, hull);
+    cv::convexHull(corners, hull, true);
   }
   else{
     hull = corners;
@@ -165,6 +226,7 @@ std::vector<cv::Point> TileDetector::refineCorners(std::vector<cv::Point> corner
 
   return final_corners;
 }
+
 
 float TileDetector::getIntersectionAngle(cv::Mat img, cv::Point p, int r){
   // Draw circle on mat same size as img
@@ -209,60 +271,6 @@ float TileDetector::getIntersectionAngle(cv::Mat img, cv::Point p, int r){
 }
 
 
-std::vector<Tile> TileDetector::getTiles(cv::Mat img, std::vector<std::vector<cv::Point>> tile_contours){
-  std::vector<Tile> tiles;
-  for(int i = 0; i < tile_contours.size(); i++){
-    Tile temp_tile;
-
-    // Set id
-    temp_tile.id = i;
-
-    // Get contour offset
-    contour_size_t size = getContourSize(tile_contours[i]);
-    std::cout << "test1" << std::endl;
-
-    // Set offset
-    temp_tile.offset.x = size.min_x;
-    temp_tile.offset.y = size.min_y;
-
-    // Get minimum contour
-    temp_tile.contour = minimizeContour(tile_contours[i]);
-    std::cout << "test2" << std::endl;
-
-    // Set tile local_cg
-    temp_tile.local_cg = getContourCG(temp_tile.contour);
-    std::cout << "test3" << std::endl;
-
-    // Get corners
-    temp_tile.corners = getTileCornersFast(temp_tile.contour, 20);
-    // temp_tile.corners = getTileCorners(temp_tile.contour, {4, 5, 6, 7, 8});
-    std::cout << "test4" << std::endl;
-
-    // Set edges
-    std::cout << "test5" << std::endl;
-    // temp_tile.edges = getTileEdges(temp_tile.contour, temp_tile.corners, img, temp_tile.offset, temp_tile.local_cg, temp_tile.id);
-
-    std::cout << "test6" << std::endl;
-    // Set image
-    temp_tile.image = getTileImage(img, temp_tile);
-    std::cout << "test7" << std::endl;
-
-    // Push tile to vector
-    tiles.push_back(temp_tile);
-  }
-
-  // Set edge global_id
-  int n = 0;
-  for(int i = 0; i < tiles.size(); i++){
-    for(int j = 0; j < tiles[i].edges.size(); j++){
-      tiles[i].edges[j].global_id = n++;
-    }
-  }
-
-  return tiles;
-}
-
-
 cv::Mat TileDetector::getTileImage(cv::Mat img, Tile& tile){
   // Offset corners
   std::vector<cv::Point> temp_corners = tile.corners;
@@ -297,17 +305,18 @@ cv::Mat TileDetector::getTileImage(cv::Mat img, Tile& tile){
 std::vector<Edge> TileDetector::getTileEdges(std::vector<cv::Point> contour, std::vector<cv::Point> corners, cv::Mat img, cv::Point tile_offset, cv::Point tile_cg, int tile_id){
   // Get corner with max x val
   int start_index = getCornerWithMaxX(corners);
+
   // Offset contour to fit with corner
   contour = sortContourQuick(contour, corners[start_index]);
+
   // Split contour into edges
   std::vector<Edge> edges;
-  int corners_size = corners.size();
   int edge_num = start_index + 1;
-  int index = getIndexClosestPointContour(contour, corners[(edge_num++)%corners_size]);
+  int index = getIndexClosestPointContour(contour, corners[(edge_num++)%corners.size()]);
   Edge temp_edge;
   for(int i = 0; i < contour.size(); i++){
     if((i+1) >= index){
-      index = getIndexClosestPointContour(contour, corners[(edge_num++)%corners_size]);
+      index = getIndexClosestPointContour(contour, corners[(edge_num++)%corners.size()]);
       if(index == 0){
         index = contour.size();
       }
@@ -316,13 +325,14 @@ std::vector<Edge> TileDetector::getTileEdges(std::vector<cv::Point> contour, std
     }
     temp_edge.contour.push_back(contour[i]);
   }
+
   // Set various edge attributes
   for(int i = 0; i < edges.size(); i++){
     Edge& edge = edges[i];
     edge.tile_id = tile_id;
     if(edge.contour.size() > 1){
       edge.dist = cv::norm(edge.contour[0] - edge.contour[edge.contour.size()-1]);
-      edge.length = cv::arcLength(edge.contour, 0);
+      edge.length = cv::arcLength(edge.contour, false);
     }
     edge.avg_color = getAvgColorContour(img, edge.contour, tile_offset);
     edge.local_cg = getContourCG(edge.contour);
@@ -385,44 +395,9 @@ cv::Mat TileDetector::drawTileEdges(cv::Mat img, std::vector<Tile> tiles){
     for(int j = 0; j < tile.edges.size(); j++){
       Edge edge = tile.edges[j];
       std::vector<cv::Point> offset_edge = offsetContour(edge.contour, tile.offset);
-      
-      // cv::Scalar color;
-      // switch (edge.index)
-      // {
-      // case EdgeIndex::right:
-      //   color = {255, 0, 0};
-      //   break;
-      // case EdgeIndex::top:
-      //   color = {0, 255, 0};
-      //   break;
-      // case EdgeIndex::left:
-      //   color = {0, 0, 255};
-      //   break;
-      // case EdgeIndex::bottom:
-      //   color = {255, 255, 255};
-      //   break;
-      // default:
-      //   break;
-      // }
-      // cv::polylines(temp_img, offset_edge, 0, color, 2);
-
-      // Draw from tab type
-      // if(edge.tab == Tab::male){
-      // if(edge.length_type == SideLength::sideLong){
-      //   cv::polylines(temp_img, offset_edge, 0, {255, 0, 0}, 5);
-      // }
-      // else{
-      //   cv::polylines(temp_img, offset_edge, 0, {0, 255, 0}, 5);
-      // }
-      // Draw with avg_color
 
       temp_img = drawContour(temp_img, offset_edge, cv::Scalar(j*255/tile.edges.size(), 255, 255), 2);
       
-      // cv::polylines(temp_img, offset_edge, 0, {0, 0, 0}, 4);
-      // cv::polylines(temp_img, offset_edge, 0, edge.avg_color, 2);
-      // // Draw with hsv
-      // cv::polylines(temp_img, offset_edge, 0, cv::Scalar(j*255/tile.edges.size(), 255, 255), 2);
-
       // Put text
       int index = static_cast<int>(edge.index);
       cv::putText(temp_img, std::to_string(index), tile.offset + edge.local_cg, cv::FONT_HERSHEY_PLAIN, 1, cv::Scalar(0, 255, 255), 2);
