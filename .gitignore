@@ -2,3 +2,4 @@ main.o
 main.out
 util.o
 TileDetector.o
+.vscode
